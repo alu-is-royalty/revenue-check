@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Revenue Predictor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        input, select {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6; /* blue-500 */
+        }
+        button {
+            background-color: #2563eb; /* blue-600 */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        button:hover {
+            background-color: #1d4ed8; /* blue-700 */
+            transform: translateY(-1px);
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 0.5rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Company Revenue Predictor</h1>
+        <p class="text-sm text-gray-600 mb-6 text-center">
+            Enter the features below to get a predicted company revenue.
+            <br>
+            <span class="font-semibold text-red-600">Note: This demo uses simulated model parameters.</span>
+        </p>
+
+        <div class="space-y-4">
+            <div>
+                <label for="marketingSpend" class="block text-gray-700 text-sm font-semibold mb-2">Marketing Spend ($)</label>
+                <input type="number" id="marketingSpend" placeholder="e.g., 50000" class="focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <label for="rdSpend" class="block text-gray-700 text-sm font-semibold mb-2">R&D Spend ($)</label>
+                <input type="number" id="rdSpend" placeholder="e.g., 30000" class="focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <label for="adminCosts" class="block text-gray-700 text-sm font-semibold mb-2">Administration Costs ($)</label>
+                <input type="number" id="adminCosts" placeholder="e.g., 20000" class="focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <label for="numEmployees" class="block text-gray-700 text-sm font-semibold mb-2">Number of Employees</label>
+                <input type="number" id="numEmployees" placeholder="e.g., 100" class="focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <label for="region" class="block text-gray-700 text-sm font-semibold mb-2">Region</label>
+                <select id="region" class="focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Select a Region</option>
+                    <option value="North America">North America</option>
+                    <option value="Europe">Europe</option>
+                    <option value="Asia">Asia</option>
+                </select>
+            </div>
+            <button onclick="predictRevenue()" class="w-full flex items-center justify-center">
+                Predict Revenue
+                <span id="loadingSpinner" class="loading-spinner hidden"></span>
+            </button>
+        </div>
+
+        <div id="result" class="mt-8 p-4 bg-blue-50 text-blue-800 rounded-lg text-center font-semibold text-lg hidden">
+            </div>
+        <div id="error" class="mt-8 p-4 bg-red-100 text-red-700 rounded-lg text-center font-semibold text-lg hidden">
+            </div>
+    </div>
+
+    <script>
+        // Hardcoded parameters derived from a simulated dataset (as explained above)
+        // In a real application, these would be loaded from a saved model/preprocessor
+        const NUMERICAL_MEANS = [60000.0, 33875.0, 22000.0, 121.875];
+        const NUMERICAL_STDS = [13693.063937629153, 5666.513478321568, 2738.6127875258308, 24.992186278915256];
+        const UNIQUE_REGIONS = ['Asia', 'Europe', 'North America'];
+        const MODEL_COEFFICIENTS = [97768.47651467235, -112196.96687076727, 97768.47651467248, -50984.06000898729, -1133.3333333329347, 4666.666666667068, -3533.3333333329474];
+        const MODEL_INTERCEPT = 178383.33333333294;
+
+        async function predictRevenue() {
+            // Hide previous results/errors
+            document.getElementById('result').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('loadingSpinner').classList.remove('hidden');
+
+            const marketingSpend = parseFloat(document.getElementById('marketingSpend').value);
+            const rdSpend = parseFloat(document.getElementById('rdSpend').value);
+            const adminCosts = parseFloat(document.getElementById('adminCosts').value);
+            const numEmployees = parseInt(document.getElementById('numEmployees').value);
+            const region = document.getElementById('region').value;
+
+            // Basic input validation
+            if (isNaN(marketingSpend) || isNaN(rdSpend) || isNaN(adminCosts) || isNaN(numEmployees) || !region) {
+                displayError("Please fill in all input fields with valid numbers and select a region.");
+                return;
+            }
+
+            // Construct the Python code to be executed by the LLM
+            // This Python code will perform the preprocessing and prediction using the hardcoded parameters
+            const pythonCode = `
+import numpy as np
+import json
+
+# Hardcoded parameters (from pre-trained model and preprocessor)
+NUMERICAL_MEANS = ${JSON.stringify(NUMERICAL_MEANS)}
+NUMERICAL_STDS = ${JSON.stringify(NUMERICAL_STDS)}
+UNIQUE_REGIONS = ${JSON.stringify(UNIQUE_REGIONS)}
+MODEL_COEFFICIENTS = ${JSON.stringify(MODEL_COEFFICIENTS)}
+MODEL_INTERCEPT = ${MODEL_INTERCEPT}
+
+def preprocess_input(marketing_spend, rd_spend, admin_costs, num_employees, region):
+    # Numerical scaling
+    numerical_features = [marketing_spend, rd_spend, admin_costs, num_employees]
+    scaled_numerical = [(val - mean) / std for val, mean, std in zip(numerical_features, NUMERICAL_MEANS, NUMERICAL_STDS)]
+
+    # One-hot encoding for region
+    encoded_region = [0] * len(UNIQUE_REGIONS)
+    try:
+        region_index = UNIQUE_REGIONS.index(region)
+        encoded_region[region_index] = 1
+    except ValueError:
+        # Handle unseen regions by setting all to 0, or raising an error
+        pass # For this demo, we'll just keep it as all zeros if unseen
+
+    # Combine all features in the correct order (numerical first, then one-hot encoded regions)
+    # The order of one-hot encoded features must match the order during training
+    processed_features = scaled_numerical + encoded_region
+    return np.array(processed_features)
+
+def predict_revenue(processed_features):
+    # Calculate linear regression prediction
+    # Dot product of features and coefficients, then add intercept
+    prediction = np.dot(processed_features, MODEL_COEFFICIENTS) + MODEL_INTERCEPT
+    return prediction.item() # .item() extracts the scalar value from numpy array
+
+# Get inputs from the JavaScript payload
+# Assuming inputs are passed as a dictionary in the prompt
+# This part is conceptual for the LLM's execution context
+# In a real API, these would be direct function arguments or part of a request body
+input_data = json.loads('${JSON.stringify({ marketingSpend, rdSpend, adminCosts, numEmployees, region })}')
+
+processed_input = preprocess_input(
+    input_data['marketingSpend'],
+    input_data['rdSpend'],
+    input_data['adminCosts'],
+    input_data['numEmployees'],
+    input_data['region']
+)
+
+predicted_val = predict_revenue(processed_input)
+
+# Return the result as a JSON string
+print(json.dumps({"predicted_revenue": predicted_val}))
+`;
+
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: pythonCode }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "predicted_revenue": { "type": "NUMBER" }
+                        },
+                        "propertyOrdering": ["predicted_revenue"]
+                    }
+                }
+            };
+
+            const apiKey = ""; // Canvas will automatically provide this at runtime
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const jsonResponseText = result.candidates[0].content.parts[0].text;
+                    const parsedJson = JSON.parse(jsonResponseText);
+                    const predictedRevenue = parsedJson.predicted_revenue;
+                    displayResult(predictedRevenue);
+                } else {
+                    displayError("Could not get a valid prediction from the model. Please try again.");
+                }
+
+            } catch (error) {
+                console.error("Prediction failed:", error);
+                displayError(`An error occurred: ${error.message}. Please check console for details.`);
+            } finally {
+                document.getElementById('loadingSpinner').classList.add('hidden');
+            }
+        }
+
+        function displayResult(revenue) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = `Predicted Revenue: $${revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            resultDiv.classList.remove('hidden');
+        }
+
+        function displayError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
